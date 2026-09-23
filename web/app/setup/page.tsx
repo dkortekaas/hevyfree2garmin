@@ -1,0 +1,192 @@
+import { getDb } from "@/lib/db";
+import { authEnabled, productionRuntime } from "@/lib/auth";
+import { loadGarminConnection, type Connection } from "@/lib/connections";
+import { ImportHevyCsv } from "@/components/import-hevy-csv";
+import { loadImportSummary, NO_IMPORT, type ImportSummary } from "@/lib/imported-workouts";
+import { ConnectGarmin } from "@/components/connect-garmin";
+import { SetupTimezone } from "@/components/setup-timezone";
+import { loadSyncControl, RUNNING, type SyncControl } from "@/lib/sync-control";
+
+// Queries the live hevy2garmin Postgres per request — never at build time.
+export const dynamic = "force-dynamic";
+
+interface SetupData {
+  dbConfigured: boolean;
+  garmin: Connection;
+  /** user_profile.timezone, or null when nothing has been chosen yet (#639). */
+  timezone: string | null;
+  /** Workouts imported from Hevy CSV exports: the only workout source. */
+  hevyImport: ImportSummary;
+  syncControl: SyncControl;
+}
+
+const NONE: Connection = { connected: false, connectedAt: null };
+const EMPTY: SetupData = { dbConfigured: false, garmin: NONE, timezone: null, hevyImport: NO_IMPORT, syncControl: RUNNING };
+
+async function loadSetup(): Promise<SetupData> {
+  let sql: ReturnType<typeof getDb>;
+  try {
+    sql = getDb();
+  } catch {
+    return EMPTY;
+  }
+  const [garmin, profile, hevyImport, syncControl] = await Promise.all([
+    loadGarminConnection(sql),
+    sql`SELECT value FROM app_cache WHERE key = 'user_profile' LIMIT 1`.catch(
+      () => [] as Array<{ value: unknown }>,
+    ),
+    loadImportSummary(sql),
+    loadSyncControl(sql),
+  ]);
+  const raw = profile[0]?.value;
+  const tz =
+    raw && typeof raw === "object" && typeof (raw as { timezone?: unknown }).timezone === "string"
+      ? ((raw as { timezone: string }).timezone.trim() || null)
+      : null;
+  return { dbConfigured: true, garmin, timezone: tz, hevyImport, syncControl };
+}
+
+function fmtDate(value: string | null): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/**
+ * `labels` exists because a timezone is not a connection (#639). Reusing this
+ * dot unchanged put "Not connected" under the Timezone heading, which reads as
+ * a broken integration rather than a field nobody has filled in yet.
+ */
+function StatusDot({
+  connected,
+  labels = ["Connected", "Not connected"],
+  tone = "bg-danger",
+}: {
+  connected: boolean;
+  labels?: [string, string];
+  /** A missing timezone is not a failure, so it should not be red like one. */
+  tone?: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className={`inline-block h-2.5 w-2.5 rounded-full ${connected ? "bg-success" : tone}`}
+        aria-hidden
+      />
+      <span className={`text-xs ${connected ? "text-success" : "text-text-muted"}`}>
+        {connected ? labels[0] : labels[1]}
+      </span>
+    </span>
+  );
+}
+
+/* A production deploy with no password: the proxy serves only this page and the login page
+   (#550), so the connect forms would only fail. Say what to do instead. */
+function SetPasswordFirst() {
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-6 md:px-6 md:py-8">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold text-text">Set a password first</h1>
+        <p className="mt-1 text-sm text-text-secondary">
+          This deployment has no dashboard password, so it serves nothing but this page.
+        </p>
+      </header>
+      <section
+        data-testid="set-password-first"
+        className="rounded-xl border border-warm/40 bg-warm/10 p-5 text-sm text-text"
+      >
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            In Vercel open your project, then <strong>Settings</strong> then{" "}
+            <strong>Environment Variables</strong>.
+          </li>
+          <li>
+            Add <code className="rounded bg-surface px-1">H2G_PASSWORD</code> with a password of your
+            choice. Optionally add{" "}
+            <code className="rounded bg-surface px-1">HEVY2GARMIN_SECRET</code> (32 random characters)
+            to sign the session cookie.
+          </li>
+          <li>Redeploy, come back here and sign in. Setup continues after that.</li>
+        </ol>
+        <p className="mt-4 text-xs text-text-muted">
+          Self-hosting with Docker or <code className="rounded bg-surface px-1">next start</code>: put
+          the same variables in the environment. The README section &quot;Securing the dashboard&quot;
+          has the details.
+        </p>
+      </section>
+    </main>
+  );
+}
+
+export default async function SetupPage() {
+  if (productionRuntime() && !authEnabled()) return <SetPasswordFirst />;
+  const data = await loadSetup();
+  const hevyImported = data.hevyImport.count > 0;
+  const garminConnected = data.garmin.connected;
+  const syncBlockedReason = data.syncControl.stopped
+    ? "Syncing is stopped. Resume it on the dashboard first."
+    : !garminConnected
+      ? "Connect Garmin below first."
+      : null;
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-6 md:px-6 md:py-8">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold text-text">Setup</h1>
+        <p className="mt-1 text-sm text-text-secondary">
+          Import your Hevy workouts from a CSV export and connect Garmin so they can sync.
+        </p>
+      </header>
+
+      {!data.dbConfigured && (
+        <div className="mb-6 rounded-lg border border-warm/40 bg-warm/10 p-4 text-sm text-warm">
+          No database is configured (DATABASE_URL is unset).
+        </div>
+      )}
+
+      {/* Hevy */}
+      <section className="mb-6 rounded-xl border border-border bg-surface-elevated p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-text">Hevy CSV export</h2>
+          <StatusDot connected={hevyImported} labels={["Imported", "Nothing imported"]} />
+        </div>
+        <p className="mb-3 text-sm text-text-secondary">
+          In the Hevy app go to Profile, Settings, Export &amp; Import data, Export workouts, and
+          upload the CSV here. Upload a newer export whenever you want to sync new workouts;
+          workouts you already imported are updated, not duplicated.
+        </p>
+        <ImportHevyCsv
+          summary={{ count: data.hevyImport.count, newest: data.hevyImport.newest, oldest: data.hevyImport.oldest }}
+          savedTimeZone={data.timezone}
+          syncBlockedReason={syncBlockedReason}
+        />
+      </section>
+
+      {/* Garmin */}
+      <section className="rounded-xl border border-border bg-surface-elevated p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-text">Garmin Connect</h2>
+          <StatusDot connected={garminConnected} />
+        </div>
+        {garminConnected && data.garmin.connectedAt && (
+          <p className="mb-3 text-xs text-text-muted">
+            Connected {fmtDate(data.garmin.connectedAt)}.
+          </p>
+        )}
+        <ConnectGarmin connected={garminConnected} />
+      </section>
+
+      {/* Timezone (#639). Last, because it only matters once something can sync,
+          and first-time users should not meet a text field before the two
+          connections that actually gate everything. */}
+      <section className="mt-6 rounded-xl border border-border bg-surface-elevated p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-text">Timezone</h2>
+          <StatusDot connected={data.timezone !== null} labels={["Set", "Not set"]} tone="bg-text-muted" />
+        </div>
+        <SetupTimezone current={data.timezone} />
+      </section>
+    </main>
+  );
+}
