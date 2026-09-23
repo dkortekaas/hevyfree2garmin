@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdkortekaas%2Fhevyfree2garmin&root-directory=web&project-name=hevyfree2garmin&repository-name=hevyfree2garmin&env=H2G_PASSWORD,HEVY2GARMIN_SECRET,CRON_SECRET&envDescription=Dashboard%20password%2C%20a%20cookie%20signing%20secret%20and%20a%20cron%20secret%20%2832%20random%20characters%20each%20for%20the%20secrets%29&envLink=https%3A%2F%2Fgithub.com%2Fdkortekaas%2Fhevyfree2garmin%23environment-variables"><img src="https://vercel.com/button" alt="Deploy with Vercel"></a>
+</p>
+
+<p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="800">
 </p>
 
@@ -47,6 +51,22 @@ On a phone the bottom bar has four tabs plus **More**, and wide tables scroll si
 ## Deploy on Vercel
 
 About ten minutes, no coding.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdkortekaas%2Fhevyfree2garmin&root-directory=web&project-name=hevyfree2garmin&repository-name=hevyfree2garmin&env=H2G_PASSWORD,HEVY2GARMIN_SECRET,CRON_SECRET&envDescription=Dashboard%20password%2C%20a%20cookie%20signing%20secret%20and%20a%20cron%20secret%20%2832%20random%20characters%20each%20for%20the%20secrets%29&envLink=https%3A%2F%2Fgithub.com%2Fdkortekaas%2Fhevyfree2garmin%23environment-variables)
+
+### With the button
+
+1. Click **Deploy with Vercel** above and sign in with GitHub. Vercel copies this repo into your GitHub account and sets **Root Directory** to `web`.
+2. Fill in the three environment variables it asks for:
+   - `H2G_PASSWORD`: the password for your dashboard.
+   - `HEVY2GARMIN_SECRET`: 32 random characters that sign the login cookie.
+   - `CRON_SECRET`: 32 random characters. Vercel's daily cron sends it to `/api/cron/sync`.
+3. After the first deploy, open the project's **Storage** tab, add **Neon Postgres** (free) and **Redeploy**. Without a database the app shows an "internal server error".
+4. Open the URL, sign in and continue on the **Setup page** (step 6 below).
+
+The button makes a copy, not a fork. A copy does not show GitHub's **Sync fork** button, so to get updates later you pull them in yourself. If you want that button, use the manual route below.
+
+### By hand
 
 1. **Fork this repo** on GitHub.
 2. **Import it on Vercel.** Go to [vercel.com/new](https://vercel.com/new), pick your fork and set **Root Directory** to `web`.
