@@ -38,15 +38,46 @@ export const DATABASE_URL_VARS = [
 export function resolveDatabaseUrl(
   env: Record<string, string | undefined> = process.env,
 ): string | null {
-  for (const name of DATABASE_URL_VARS) {
+  for (const name of [...DATABASE_URL_VARS, ...prefixedNames(env)]) {
     const url = env[name]?.trim();
-    if (url && (url.includes("postgres") || url.includes("neon"))) return url;
+    if (url && looksLikePostgres(url)) return url;
   }
   return null;
 }
 
+function looksLikePostgres(url: string): boolean {
+  return url.includes("postgres") || url.includes("neon");
+}
+
+/**
+ * The same variables under a custom prefix, e.g. `HEVY_POSTGRES_URL`.
+ *
+ * Connecting a database in Vercel Storage offers a "Custom Prefix" field. Fill
+ * it in and every variable gets that prefix, so none of the four names above
+ * exists and the app reported "no database" on a project that plainly had one.
+ * Pooled (`*_POSTGRES_URL`) before direct (`*_DATABASE_URL`), for the same
+ * reason as the list above; alphabetical within each so the pick is stable.
+ */
+function prefixedNames(env: Record<string, string | undefined>): string[] {
+  const keys = Object.keys(env).filter((k) => !(DATABASE_URL_VARS as readonly string[]).includes(k));
+  const pooled = keys.filter((k) => k.endsWith("_POSTGRES_URL")).sort();
+  const direct = keys.filter((k) => k.endsWith("_DATABASE_URL")).sort();
+  return [...pooled, ...direct];
+}
+
 /** The names, for an error message that tells the user what to actually set. */
-export const DATABASE_URL_HINT = DATABASE_URL_VARS.join(", ");
+export const DATABASE_URL_HINT = `${DATABASE_URL_VARS.join(", ")} (or any of these with a prefix, e.g. MY_POSTGRES_URL)`;
+
+/**
+ * Names of the database-looking variables the running app can see, never their
+ * values. Shown when no connection string was found, so a user can tell a
+ * variable that is missing from one that is named or scoped wrong.
+ */
+export function databaseEnvNames(env: Record<string, string | undefined> = process.env): string[] {
+  return Object.keys(env)
+    .filter((k) => /POSTGRES|DATABASE|NEON|^STORAGE_|^PG/.test(k) && env[k]?.trim())
+    .sort();
+}
 
 /**
  * The URL to hand to node-postgres (`pg`), which garmin-auth's DBTokenStore uses.

@@ -1,4 +1,5 @@
 import { HEVY_TO_GARMIN } from "@/engine";
+import { NoDatabaseNotice } from "@/components/no-database-notice";
 import { getDb } from "@/lib/db";
 import {
   CATEGORY_OPTIONS,
@@ -70,10 +71,7 @@ export default async function MappingsPage() {
       </header>
 
       {!data.dbConfigured && (
-        <div className="mb-6 rounded-lg border border-warm/40 bg-warm/10 p-4 text-sm text-warm">
-          No database is configured (DATABASE_URL is unset). Custom mappings are
-          unavailable; the built-in map below still works.
-        </div>
+        <NoDatabaseNotice>Custom mappings are unavailable; the built-in map below still works.</NoDatabaseNotice>
       )}
 
       {/* Unmapped exercises (from recent Hevy workouts) */}

@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { NoDatabaseNotice } from "@/components/no-database-notice";
 import { loadGarminConnection } from "@/lib/connections";
 import { loadImportSummary } from "@/lib/imported-workouts";
 import { loadSyncControl, RUNNING, type SyncControl as SyncControlState } from "@/lib/sync-control";
@@ -234,9 +235,7 @@ export default async function DashboardPage() {
       </header>
 
       {!data.dbConfigured && (
-        <div className="mb-6 rounded-lg border border-warm/40 bg-warm/10 p-4 text-sm text-warm">
-          No database is configured (DATABASE_URL is unset). Showing empty state.
-        </div>
+        <NoDatabaseNotice>Showing empty state.</NoDatabaseNotice>
       )}
 
       {/* Connection badges */}
