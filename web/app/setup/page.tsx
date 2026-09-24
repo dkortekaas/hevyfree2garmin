@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { NoDatabaseNotice } from "@/components/no-database-notice";
 import { authEnabled, productionRuntime } from "@/lib/auth";
 import { loadGarminConnection, type Connection } from "@/lib/connections";
 import { ImportHevyCsv } from "@/components/import-hevy-csv";
@@ -140,9 +141,7 @@ export default async function SetupPage() {
       </header>
 
       {!data.dbConfigured && (
-        <div className="mb-6 rounded-lg border border-warm/40 bg-warm/10 p-4 text-sm text-warm">
-          No database is configured (DATABASE_URL is unset).
-        </div>
+        <NoDatabaseNotice />
       )}
 
       {/* Hevy */}

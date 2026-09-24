@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveDatabaseUrl, DATABASE_URL_VARS, pgConnectionString } from "./database-url";
+import { resolveDatabaseUrl, DATABASE_URL_VARS, pgConnectionString, databaseEnvNames } from "./database-url";
 
 /**
  * The web read `DATABASE_URL` and nothing else, while Python reads four names
@@ -82,5 +82,33 @@ describe("pgConnectionString", () => {
     for (const url of ["postgres://h/db", "postgres://h/db?sslmode=disable", "postgres://h/db?sslmode=verify-full"]) {
       expect(pgConnectionString(url)).toBe(url);
     }
+  });
+});
+
+describe("resolveDatabaseUrl with a Vercel Storage custom prefix", () => {
+  it("finds the prefixed pooled URL", () => {
+    expect(resolveDatabaseUrl({ HEVY_POSTGRES_URL: PG })).toBe(PG);
+  });
+
+  it("finds the prefixed direct URL", () => {
+    expect(resolveDatabaseUrl({ HEVY_DATABASE_URL: NEON })).toBe(NEON);
+  });
+
+  it("prefers pooled over direct under a prefix too", () => {
+    expect(
+      resolveDatabaseUrl({ HEVY_DATABASE_URL: "postgres://direct/db", HEVY_POSTGRES_URL: "postgres://pooled/db" }),
+    ).toBe("postgres://pooled/db");
+  });
+
+  it("still prefers an unprefixed name", () => {
+    expect(resolveDatabaseUrl({ HEVY_POSTGRES_URL: "postgres://prefixed/db", DATABASE_URL: PG })).toBe(PG);
+  });
+});
+
+describe("databaseEnvNames", () => {
+  it("lists database-looking names, never values, and skips empty ones", () => {
+    expect(
+      databaseEnvNames({ HEVY_POSTGRES_URL: PG, PGHOST: "h", NEON_PROJECT_ID: "x", DATABASE_URL: " ", OTHER: "y" }),
+    ).toEqual(["HEVY_POSTGRES_URL", "NEON_PROJECT_ID", "PGHOST"]);
   });
 });

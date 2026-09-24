@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { NoDatabaseNotice } from "@/components/no-database-notice";
 import { WorkoutRow } from "@/components/workout-row";
 import { CandidatesList } from "@/components/candidates-list";
 import { loadSyncControl } from "@/lib/sync-control";
@@ -137,9 +138,7 @@ export default async function WorkoutsPage() {
       {data.dbConfigured && <CandidatesList />}
 
       {!data.dbConfigured && (
-        <div className="mb-6 rounded-lg border border-warm/40 bg-warm/10 p-4 text-sm text-warm">
-          No database is configured (DATABASE_URL is unset). Showing empty state.
-        </div>
+        <NoDatabaseNotice>Showing empty state.</NoDatabaseNotice>
       )}
 
       {data.items.length === 0 ? (

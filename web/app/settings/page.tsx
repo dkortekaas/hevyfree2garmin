@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { NoDatabaseNotice } from "@/components/no-database-notice";
 import { SettingsForm } from "@/components/settings-form";
 import { DangerZone } from "@/components/danger-zone";
 import { DeleteAllWorkouts } from "@/components/delete-all-workouts";
@@ -158,9 +159,7 @@ export default async function SettingsPage() {
       </div>
 
       {!data.dbConfigured && (
-        <div className="mb-6 rounded-lg border border-warm/40 bg-warm/10 p-4 text-sm text-warm">
-          No database is configured (DATABASE_URL is unset). Showing empty state.
-        </div>
+        <NoDatabaseNotice>Showing empty state.</NoDatabaseNotice>
       )}
 
       {/* Connections */}
