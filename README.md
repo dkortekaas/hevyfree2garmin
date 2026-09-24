@@ -101,9 +101,11 @@ The dashboard's **Sync to Garmin** card:
 
 - **Preview** shows what the next sync would do (which workout, and whether it would upload a new activity or match one already on Garmin). Nothing is written.
 - **Sync next** uploads that one workout, after you confirm.
-- **Sync all** uploads every pending workout, one at a time, with live progress and a Stop button.
+- **Sync all** uploads every pending workout, one at a time, with live progress and a Stop button. It runs on the server, so you can close the page or lock your phone. Open the dashboard again to see how far it got.
 
 Each workout can also be synced on its own from the **Workouts** page.
+
+**How Sync all keeps running.** The server syncs for about 30 seconds at a time, which stays inside Vercel's time limit per request. After each block it calls `/api/cron/sync-background` to start the next one, authenticated with `CRON_SECRET`. Without `CRON_SECRET`, a run pauses after its first block and continues whenever the dashboard is open.
 
 On Vercel, a cron job runs once a day and syncs anything still pending. It calls `GET /api/cron/sync` with `Authorization: Bearer <CRON_SECRET>`. It waits two hours after a workout ends, so a watch recording can reach Garmin first and be merged instead of duplicated. The buttons on the dashboard do not wait.
 

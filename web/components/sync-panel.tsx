@@ -64,7 +64,8 @@ const BTN_PRIMARY =
  *   next sync WOULD do without writing anything to Garmin or the DB.
  * - "Sync next" uploads that one workout (?live=1).
  * - "Sync all" uploads every pending workout, one at a time, with live
- *   progress (./sync-all).
+ *   progress. It runs on the server (./sync-all, lib/background-sync), so it
+ *   keeps going with the page closed.
  *
  * A bad upload creates a duplicate Garmin/Strava activity, so both live buttons
  * are behind an inline confirmation, and the server independently requires
@@ -143,7 +144,7 @@ export function SyncPanel({
           <p className="text-xs text-warm">
             {confirm === "one"
               ? "This uploads the next workout to Garmin Connect. It runs the same duplicate-safety checks as the automatic sync, but it is a real upload."
-              : "This uploads every pending workout to Garmin Connect, one at a time. Each upload runs the same duplicate-safety checks as the automatic sync."}
+              : "This uploads every pending workout to Garmin Connect, one at a time. It runs on the server, so you can close this page. Each upload runs the same duplicate-safety checks as the automatic sync."}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:flex">
             <button

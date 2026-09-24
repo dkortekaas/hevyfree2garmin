@@ -3,6 +3,17 @@
 All notable changes to hevyfree2garmin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **Sync all** runs on the server in 30-second blocks that chain into each other, so it keeps going when the page is closed or the phone locks. The dashboard picks up the progress when it opens again.
+
+### Fixed
+
+- The first sync after a CSV import failed with "Invalid time value" when no timing settings were saved and the workout was merged into a watch activity.
+- A database connected in Vercel Storage with a custom prefix (for example `HEVY_POSTGRES_URL`) is found. The "no database" notice also lists the database variables the deployment can see.
+
 ## [0.1.0] - 2026-09-23
 
 First release, forked from [hevy2garmin](https://github.com/drkostas/hevy2garmin)
