@@ -1,107 +1,111 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import {
-  initialLoopState,
-  stepLoop,
-  loopPercent,
-  errorHint,
-  type LoopState,
-  type SyncOneLike,
-} from "@/lib/sync-loop";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { initialLoopState, loopPercent, errorHint, type LoopState } from "@/lib/sync-loop";
 
-/**
- * Append a "Sync all" pass to the dashboard's Sync log.
- *
- * Best-effort on purpose: the sync itself already happened, and failing to
- * write a log row must not be reported to the user as a failed sync. The loop
- * has no `failed` counter of its own, because it stops on the first error
- * rather than counting them, so an error ends the run with whatever it had
- * plus one failure.
- */
-async function recordRun(state: LoopState): Promise<void> {
-  try {
-    await fetch("/api/sync-run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        synced: state.synced,
-        skipped: state.skipped,
-        failed: state.errorKind ? 1 : 0,
-      }),
-    });
-  } catch {
-    // The log is diagnostic. Losing a row is the lesser loss.
-  }
+/** What GET/POST /api/sync-background return (lib/background-sync). */
+interface ServerState {
+  running?: boolean;
+  updatedAt?: string | null;
+  loop?: LoopState;
+  error?: string;
 }
 
+const POLL_MS = 2_000;
+/** A finished run is still shown when the page opens this soon after it ended. */
+const SHOW_FINISHED_MS = 15 * 60_000;
+
 /**
- * "Sync all": drives /api/sync-one?live=1 once per workout (lib/sync-loop)
- * until nothing is left, an error, or stop(). Shared by the dashboard's sync
- * card and the CSV import, which offers to upload what it just imported.
+ * "Sync all", run by the server (lib/background-sync) so it keeps going when
+ * the page is closed or the phone locks. This hook only starts it, stops it
+ * and polls its progress; opening the page later picks the progress up again.
  *
- * Every call is a real Garmin upload, so callers put start() behind an
- * explicit user action; the server also requires authorization for ?live=1.
+ * Starting is a real Garmin upload, so callers put start() behind an explicit
+ * user action; the server also requires a session for it.
  */
 export function useSyncAll() {
   const router = useRouter();
   const [loop, setLoop] = useState<LoopState>(initialLoopState);
   const [running, setRunning] = useState(false);
-  const stopRef = useRef(false);
+  const wasRunning = useRef(false);
 
-  async function start(): Promise<LoopState> {
-    setRunning(true);
-    stopRef.current = false;
-    let cur: LoopState = { ...initialLoopState };
-    setLoop(cur);
+  const apply = useCallback(
+    (d: ServerState, fresh: boolean) => {
+      const isRunning = Boolean(d.running);
+      const ended = Date.parse(d.updatedAt ?? "");
+      const recent = Number.isFinite(ended) && Date.now() - ended < SHOW_FINISHED_MS;
+      if (d.loop && (isRunning || fresh || recent)) setLoop({ ...initialLoopState, ...d.loop });
+      setRunning(isRunning);
+      if (wasRunning.current && !isRunning && (d.loop?.synced ?? 0) > 0) router.refresh();
+      wasRunning.current = isRunning;
+    },
+    [router],
+  );
+
+  const poll = useCallback(async () => {
     try {
-      // Cap iterations defensively so a misbehaving server can't spin forever.
-      for (let i = 0; i < 500; i++) {
-        if (stopRef.current) {
-          cur = { ...cur, done: true, message: `Paused after ${cur.synced + cur.skipped} workout(s).` };
-          setLoop(cur);
-          break;
-        }
-        let httpStatus = 0;
-        let res: SyncOneLike = {};
-        try {
-          // batch=1: this loop posts ONE aggregate row to /api/sync-run when it
-          // finishes, so the route must not also write a row per workout.
-          const r = await fetch("/api/sync-one?live=1&batch=1", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ live: 1 }),
-          });
-          httpStatus = r.status;
-          res = (await r.json().catch(() => ({}))) as SyncOneLike;
-        } catch (err) {
-          cur = { ...cur, done: true, errorKind: "generic", message: err instanceof Error ? err.message : "Network error." };
-          setLoop(cur);
-          break;
-        }
-        const { state: next, cont } = stepLoop(cur, { httpStatus, result: res });
-        cur = next;
-        setLoop(cur);
-        if (!cont) break;
-      }
-    } finally {
-      setRunning(false);
-      // Record the whole pass as ONE row in the Sync log. A row per workout
-      // would fill the panel with dozens of one-line entries (#611).
-      await recordRun(cur);
-      if (cur.synced > 0) router.refresh();
+      const res = await fetch("/api/sync-background", { cache: "no-store" });
+      if (res.ok) apply((await res.json()) as ServerState, false);
+    } catch {
+      // Offline for a moment; the next poll tries again.
     }
-    return cur;
+  }, [apply]);
+
+  // Pick up a run started earlier, from this page or another.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading the server's state on mount is the point
+    void poll();
+  }, [poll]);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => void poll(), POLL_MS);
+    return () => clearInterval(id);
+  }, [running, poll]);
+
+  async function start(): Promise<void> {
+    setLoop({ ...initialLoopState, started: false });
+    try {
+      const res = await fetch("/api/sync-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const d = (await res.json().catch(() => ({}))) as ServerState;
+      if (!res.ok) {
+        setRunning(false);
+        setLoop({
+          ...initialLoopState,
+          done: true,
+          errorKind: res.status === 401 ? "unauthorized" : "generic",
+          message: d.error ?? `Could not start the sync (${res.status}).`,
+        });
+        return;
+      }
+      apply(d, true);
+    } catch (err) {
+      setLoop({ ...initialLoopState, done: true, errorKind: "generic", message: err instanceof Error ? err.message : "Network error." });
+    }
+  }
+
+  async function stop(): Promise<void> {
+    try {
+      await fetch("/api/sync-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop" }),
+      });
+    } finally {
+      void poll();
+    }
   }
 
   return {
     loop,
     running,
     start,
-    stop: () => {
-      stopRef.current = true;
-    },
+    stop,
     reset: () => setLoop(initialLoopState),
   };
 }
@@ -112,7 +116,7 @@ export function SyncAllProgress({ loop, running }: { loop: LoopState; running: b
   const pct = loopPercent(loop);
   const onGarmin = loop.total > 0 ? loop.total - loop.remaining : loop.synced;
   return (
-    <div className="mt-4" aria-live="polite">
+    <div className="mt-4" aria-live="polite" data-testid="sync-all-progress">
       <div className="h-2 w-full overflow-hidden rounded-full bg-surface-active">
         <div
           className="h-full rounded-full bg-teal transition-all duration-300"
@@ -130,6 +134,11 @@ export function SyncAllProgress({ loop, running }: { loop: LoopState; running: b
         {loop.skipped > 0 && <span>Skipped: <span className="font-semibold text-text-muted">{loop.skipped}</span></span>}
         {running && loop.currentTitle && <span className="min-w-0 truncate text-text-muted">· {loop.currentTitle}…</span>}
       </div>
+      {running && (
+        <p className="mt-2 text-xs text-text-muted">
+          Runs on the server: you can close this page or lock your phone, and come back to see the progress.
+        </p>
+      )}
       {loop.done && loop.message && (
         <p className={`mt-2 text-xs ${loop.errorKind ? "text-danger" : "text-text-secondary"}`} role={loop.errorKind ? "alert" : undefined}>
           {loop.errorKind ? errorHint(loop.errorKind) : loop.message}
