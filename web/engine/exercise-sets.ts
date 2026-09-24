@@ -113,7 +113,13 @@ export function buildExerciseSetsPayload(
   customMappings?: Record<string, [number, number]>,
   timing?: Partial<SetTiming>,
 ): ExerciseSetsPayload {
-  const t: SetTiming = { ...DEFAULT_SET_TIMING, ...timing };
+  // Only real numbers override a default. A host with no timing saved passes
+  // the keys with `undefined`, and a plain spread let those wipe the defaults:
+  // every set lasted NaN seconds and toISOString() threw "Invalid time value".
+  const t: SetTiming = { ...DEFAULT_SET_TIMING };
+  for (const [k, v] of Object.entries(timing ?? {}) as [keyof SetTiming, unknown][]) {
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) t[k] = v;
+  }
   const exercises = workout.exercises ?? [];
   if (!exercises.length) return { activityId, exerciseSets: [] };
 
