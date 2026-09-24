@@ -146,12 +146,13 @@ export async function loadSyncSettings(sql: Sql): Promise<SyncSettings> {
       customMappings: Object.keys(customMappings).length ? customMappings : undefined,
       // The same four numbers the FIT uses, so a merged workout and an
       // uploaded one lay their sets out the same way.
-      timing: {
-        workingSetS: profile.workingSetS,
-        warmupSetS: profile.warmupSetS,
-        restSetsS: profile.restSetsS,
-        restExercisesS: profile.restExercisesS,
-      },
+      // Unset fields are left out rather than passed as undefined, so the
+      // engine keeps its defaults for them.
+      timing: Object.fromEntries(
+        (["workingSetS", "warmupSetS", "restSetsS", "restExercisesS"] as const)
+          .filter((k) => profile[k] !== undefined)
+          .map((k) => [k, profile[k]]),
+      ),
     },
     hrFusion: bool(hrCfg?.enabled, d.hrFusion),
     descriptionEnabled: bool(mergeCfg?.description_enabled, d.descriptionEnabled),

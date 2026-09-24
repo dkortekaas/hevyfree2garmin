@@ -179,4 +179,10 @@ describe("the profile and timing settings", () => {
   it("is empty for a database with nothing saved", async () => {
     expect((await loadSyncSettings(fakeSql())).profile).toEqual({});
   });
+
+  it("hands the merge no undefined timing fields when nothing is saved", async () => {
+    // Undefined keys spread over the engine's defaults and made every merged
+    // set NaN seconds long: "Invalid time value" on the first CSV sync.
+    expect((await loadSyncSettings(fakeSql())).merge.timing).toEqual({});
+  });
 });

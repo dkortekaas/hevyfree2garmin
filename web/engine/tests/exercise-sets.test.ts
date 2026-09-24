@@ -263,3 +263,16 @@ describe("set timing comes from the user's settings", () => {
     expect(Math.round(p.exerciseSets[0].duration)).toBe(90);
   });
 });
+
+describe("buildExerciseSetsPayload with unset timing fields", () => {
+  // A database with no `timing` row hands the engine { workingSetS: undefined,
+  // ... }. Spread over the defaults, that wiped them, every set lasted NaN
+  // seconds, and the merge died on `toISOString()` with "Invalid time value".
+  it("keeps the defaults for fields that are undefined", () => {
+    const workout = { exercises: [{ title: "Bench Press (Barbell)", sets: [{ type: "normal", weight_kg: 80, reps: 8 }, { type: "normal", weight_kg: 80, reps: 8 }] }] };
+    const timing = { workingSetS: undefined, warmupSetS: undefined, restSetsS: undefined, restExercisesS: undefined };
+    const payload = buildExerciseSetsPayload(workout as never, 1, "2026-09-22 16:05:00", 3600, undefined, timing as never);
+    expect(payload.exerciseSets).toHaveLength(3); // two sets and the rest between them
+    for (const s of payload.exerciseSets) expect(String(s.startTime)).toMatch(/^2026-09-22T/);
+  });
+});
