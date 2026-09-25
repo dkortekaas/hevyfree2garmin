@@ -36,8 +36,13 @@ export interface RateLimitOptions {
 }
 
 export const DEFAULT_RATE_LIMIT = {
-  /** `DEFAULT_CALL_DELAY` in garmin_auth. */
-  delayMs: 1000,
+  /**
+   * Half of `DEFAULT_CALL_DELAY` in garmin_auth (1s). A workout takes five to
+   * seven Garmin calls, so a full second each made a backfill of a year's
+   * workouts take the better part of an hour. A 429 still gets the backoff
+   * below, so a Garmin that wants us slower still gets its way.
+   */
+  delayMs: 500,
   /** `DEFAULT_MAX_RETRIES` in garmin_auth. */
   maxAttempts: 3,
   /** `DEFAULT_BASE_WAIT` in garmin_auth, in ms. */
