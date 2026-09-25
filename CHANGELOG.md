@@ -7,6 +7,7 @@ All notable changes to hevyfree2garmin are documented here. The format follows
 
 ### Changed
 
+- Syncing is faster: half a second between Garmin calls instead of a full one, and no second heart-rate request for workouts that ended more than two days ago.
 - **Sync all** runs on the server in 30-second blocks that chain into each other, so it keeps going when the page is closed or the phone locks. The dashboard picks up the progress when it opens again.
 
 ### Fixed

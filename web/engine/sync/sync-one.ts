@@ -89,6 +89,15 @@ function hrDeps(deps: SyncDeps, gateway: GarminGateway) {
   };
 }
 
+/** How long Garmin's daily heart-rate feed can lag behind a workout. */
+const HR_FEED_LAG_MS = 48 * 3600 * 1000;
+
+/** Did the workout end within the daily HR feed's lag? Unknown times count as recent. */
+function endedRecently(w: DedupWorkout, now = Date.now()): boolean {
+  const end = toUtcDate(String(w.end_time ?? w.start_time ?? ""));
+  return !end || now - end.getTime() < HR_FEED_LAG_MS;
+}
+
 function workoutView(w: DedupWorkout): SyncOneResult["workout"] {
   return {
     hevy_id: w.id,
@@ -292,7 +301,11 @@ export async function syncOneWorkout(deps: SyncDeps, options: SyncOneOptions = {
       // grace period makes this MORE likely rather than less, because an
       // unattended run reaches the workout not long after its window opens.
       // Python does the same at `sync.py:545-557`.
-      if (!found || !found.length) {
+      //
+      // Only for a workout that ended recently: the lag is hours, so an older
+      // workout that has no readings now will not have them a second later,
+      // and asking again cost every workout of a backfill an extra call.
+      if ((!found || !found.length) && endedRecently(workout)) {
         found = await hrForSync(workout, hrDeps(deps, gateway), hrOptions);
       }
 
